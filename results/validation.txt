@@ -1,0 +1,12 @@
+R version: 4.5.2
+ggplot2: 4.0.2
+knitr: 1.51
+Sites: 120
+Poisson interaction dispersion: 5.37756778800929
+Quasi interaction F-test p: 0.419943794875403
+No-take/Open expected-count ratio: 1.75985663082508
+Approximate 95% CI (plus/minus 2 SE): 1.24191370956532 2.49380881876489
+Input completeness/count integrity: PASS
+Poisson and quasi interaction fitted means agree: PASS
+Published zone coefficient reproduced: PASS
+Sensitivity direction preserved: PASS
