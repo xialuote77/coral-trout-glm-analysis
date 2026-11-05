@@ -1,0 +1,372 @@
+---
+title: "Coral Trout Abundance: Count Models and Overdispersion"
+author: "Kunze (Charlotte) Lyu"
+format:
+  html:
+    toc: true
+    embed-resources: true
+execute:
+  echo: true
+---
+
+Individual statistical modelling coursework, University of Melbourne, 2026. The 120-site teaching extract derives from AIMS Long-Term Monitoring Program visual-census fish data for 2012. Site identifiers are anonymised and latitude bands are teaching categories. Counts sum five equal-length transects per site.
+
+Data acknowledgement: Australian Institute of Marine Science (AIMS), [dataset metadata](https://apps.aims.gov.au/metadata/view/5be0b340-4ade-11dc-8f56-00008a07204e). Course assignment requirements and identifying submission headers are omitted. See docs/REVIEW.md for reproduction scope.
+
+## Part 1: Executive summary (3 marks)
+
+Provide a concise, non-technical summary of the problem, statistical approach, principal findings, uncertainty, and most important limitation. This section should stand on its own and should not contain R code.
+
+### Part 2: Problem and data understanding (3 marks)
+
+Translate the client's questions into statistical objectives. Identify the response and explanatory variables, describe the observational unit and experimental design, and check the dataset's structure, factor levels, and missing values.
+
+### Part 3: Exploratory analysis (3 marks)
+
+Use appropriate numerical summaries and plots to investigate the response distribution, differences across latitude bands and zones, and whether the association with zone appears to differ across latitude bands. Explain why each display is useful and interpret the important patterns. Figures must show the underlying observations or otherwise make the amount of data in each group clear.
+
+### Part 4: Initial GLM choice and formulation (3 marks)
+
+Decide on an appropriate GLM for the response, including its response distribution and link function. Explain the complete statistical model: define the random variable and its mean, state the distribution and mean--variance relationship, identify the assumptions being made about the observations, specify the link function, and write the linear predictor containing `latitude_band`, `zone`, and their interaction. Justify why the distribution and link are appropriate, including how the link ensures that fitted expected counts take valid values. Fit the model in R and explain the meanings of the intercept, main effects, and interaction under the chosen link. A `glm()` command and its output without this explanation are not sufficient.
+
+### Part 5: Initial model comparison (3 marks)
+
+Compare the interaction model with the corresponding additive model. Use an appropriate difference-in-deviance procedure for your initial GLM and compare AIC values where valid. State which mean structure appears preferable at this stage and justify the decision. Do not interpret a main-effect coefficient in isolation if an interaction is retained.
+
+### Part 6: Dispersion assessment (3 marks)
+
+Assess whether the variance assumption of your initial model is adequate. Calculate and interpret the estimated dispersion using Pearson residuals. Support your conclusion with an appropriate goodness-of-fit calculation and explain what the result implies for inference from the initial model.
+
+### Part 7: Overdispersion model and final selection (3 marks)
+
+If there is evidence of overdispersion, fit an appropriate model covered in the overdispersion lectures and revisit the interaction using the correct comparison for nested models. Explain which model-selection tools are and are not valid for this revised model, how accounting for overdispersion changes inference, and which final model you select. If you find no evidence of overdispersion, justify retaining the initial variance assumption.
+
+### Part 8: Diagnostics and model alternatives (3 marks)
+
+Assess the final model using diagnostic methods covered in the GLM lectures. Include:
+
+- residuals plotted against the fitted linear predictor or fitted mean;
+- an appropriate assessment of unusually large residuals;
+- leverage; and
+- Cook's distance or another influence measure covered in the subject.
+
+Identify any site that appears unusual or influential, and explain what the diagnostics indicate. If warranted, refit the same model without that site and compare the substantive conclusions to investigate its influence. Discuss whether the diagnostic results suggest that an alternative model covered in the subject should be considered. Do not delete a site merely because it is inconvenient.
+
+### Part 9: Estimates and uncertainty for the client (3 marks)
+
+Use the final model to answer the client's questions. Present fitted mean counts at site level for the relevant combinations of latitude band and zone. Calculate an estimate and 95% confidence interval for the comparison between sites in no take zones and sites on reefs open to fishing. Calculate the interval on the scale of the linear predictor and, where appropriate, transform the estimate and interval endpoints back to the response scale. If the interaction term is retained, interpret the relevant coefficients together. Use the results to answer the client's questions directly.
+
+## Presentation requirements
+
+Each part is worth 3 marks. Marks may be lost for unsupported claims, unreadable displays, unexplained output, or conclusions that do not follow from the analysis.
+
+- Create your report using this QMD template and write beneath the supplied headings. You may add subheadings, but do not delete the assignment brief or data acknowledgement.
+- Replace the author placeholder in the YAML with your name and student ID.
+- The report, from **Part 1** through **Part 9**, should be no more than **2,000 words**. Figure captions, table contents, equations, R code, and R output do not count toward this limit.
+- Integrate all working into the relevant assessed part. The mathematics, R code, output, tables, figures, diagnostics, and interpretation supporting a conclusion must appear together in that part. No separate section for working is permitted.
+- All R code and results used in the analysis must be visible. Do not paste screenshots of code, console output, tables, or figures.
+- The QMD must render successfully from beginning to end in a clean R session and must not rely on objects created interactively.
+- Include every package-loading command required by your report. Installation commands such as `install.packages()` must not appear in the submitted report.
+- Use a two-sided significance level of 5% and 95% confidence intervals unless stated otherwise.
+- Report numerical results to a sensible precision. Give every table and figure an informative title or caption, label axes clearly, and refer to each display in the text.
+- Use the GLM and quasi-likelihood methods covered in the subject. Cite any external sources, packages, or code you use.
+
+## Part 1: Executive summary
+
+This report examined how coral trout abundance varied across Northern, Central and Southern latitude bands and between reefs that were open to fishing and those in No-take zones in the 2012 survey. The analysis used a count model that allowed for substantially greater variability in coral trout numbers than would be expected under a standard Poisson model.
+
+Coral trout abundance was much higher in the Southern band than in the Northern and Central bands. Fitted site-level mean counts were 2-4 fish in the Northern and Central bands, compared with about 8.5 in Southern Open sites and 14.9 in Southern No-take sites. After accounting for latitude, sites in No-take zones were estimated to have 1.76 times the expected coral trout count of sites open to fishing, with a 95% confidence interval from 1.24 to 2.49. 
+
+Although the initial analysis suggested that the association with fishing zone might differ across latitude bands, this was no longer supported after allowing for substantial extra variability in the counts. Model diagnostics identified a small number of unusual and influential sites, particularly AIMS022 and AIMS024. However, sensitivity analyses showed that removing these sites reduced the estimated magnitude of some effects but did not change the main conclusions. The most important limitation is that the data are observational, so the observed differences between fishing zones should be interpreted as associations rather than evidence that zoning itself caused the differences in coral trout abundance.
+
+## Part 2: Problem and data understanding
+
+```{r}
+#| label: load-data
+
+reef <- read.csv("data/aims_coral_trout_sites_2012.csv")
+
+reef$latitude_band <- factor(
+  reef$latitude_band,
+  levels = c("Northern", "Central", "Southern")
+)
+reef$zone <- factor(
+  reef$zone,
+  levels = c("Open", "No-take")
+)
+
+dim(reef)
+names(reef)
+str(reef)
+summary(reef)
+```
+
+```{r}
+colSums(is.na(reef))
+```
+
+The statistical objective is to assess whether expected site-level coral trout abundance is associated with latitude band and fishing zone, and whether the association with fishing zone differs among latitude bands. The response variable is `coral_trout`, the total number of coral trout recorded across five equal-length transects at each monitoring site. The explanatory variables are `latitude_band` (Northern, Central, Southern) and `zone` (Open, No-take). The observational unit is a monitoring site, with each row representing one site in the 2012 survey. As the study is observational rather than experimental, any association with fishing zone should not be interpreted as causal.
+
+The dataset contains 120 sites and four variables. `site` was stored as a character variable, `latitude_band` and `zone` as factors, and `coral_trout` as an integer-valued count. Northern and Open were used as the reference levels. There were 36 Northern, 36 Central and 48 Southern sites, with 60 Open and 60 No-take sites.`coral_trout` ranged from 0 to 61. No missing values were present in any of the four variables.
+
+
+## Part 3: Exploratory analysis
+
+Exploratory analysis was then used to examine the count distribution and possible differences across latitude bands and zones.
+
+```{r}
+hist(reef$coral_trout,
+     breaks = 15,
+     xlab = "Coral trout count",
+     main = "Distribution of site-level coral trout counts")
+```
+
+The histogram shows a strongly right-skewed distribution. Most sites recorded relatively few coral trout, while a small number of sites had much larger counts, producing a long right tail. This substantial variability motivates careful assessment of the variance assumption in the subsequent count model.
+
+```{r}
+library(ggplot2)
+
+ggplot(reef, aes(x = latitude_band, y = coral_trout, fill = zone)) +
+  geom_boxplot(outlier.shape = NA,
+               position = position_dodge(width = 0.8)) +
+  geom_point(aes(group = zone),
+             position = position_jitterdodge(jitter.width = 0.12,
+                                             dodge.width = 0.8),
+             size = 1.5,
+             alpha = 0.6) +
+  labs(x = "Latitude band",
+       y = "Coral trout count",
+       fill = "Zone",
+       title = "Coral trout counts by latitude band and fishing zone") +
+  theme_bw()+
+  scale_fill_manual(values = c("Open" = "#D96C5F",
+                             "No-take" = "#7183C7"))
+
+```
+
+Differences were also apparent across latitude bands. Northern and Central sites generally had low coral trout counts with substantial overlap between Open and No-take zones, whereas Southern sites had higher counts and greater variability. Within the Southern band, No-take sites tended to have higher counts than Open sites. Several unusually large observations were also present, particularly among Southern No-take sites, and these will be examined later using model diagnostics.
+
+```{r}
+with(reef,
+     interaction.plot(latitude_band, zone, coral_trout,
+                      xlab = "Latitude band",
+                      ylab = "Mean coral trout count",
+                      trace.label = "Zone"))
+```
+
+Consistent with this pattern, the interaction plot suggests that the association between fishing zone and coral trout abundance may differ across latitude bands. Mean counts for Open and No-take sites were relatively similar in the Northern and Central bands, but the difference became much larger in the Southern band. The non-parallel profiles therefore provide preliminary evidence of an interaction, which will be formally assessed in the GLM analysis.
+
+```{r}
+group_summary <- aggregate(
+  coral_trout ~ latitude_band + zone,
+  data = reef,
+  FUN = function(x) c(n = length(x),
+                      mean = mean(x),
+                      median = median(x),
+                      variance = var(x))
+  )
+group_summary <- cbind(group_summary[c("latitude_band", "zone")],
+                       as.data.frame(group_summary$coral_trout))
+
+names(group_summary) <- c("Latitude band", "Zone", "n", "Mean", "Median", "Variance")
+
+group_summary <- group_summary[order(group_summary$`Latitude band`, group_summary$Zone),]
+
+knitr::kable(group_summary, digits = 2,
+             caption = "Summary of coral trout by latitude band and fishing zone")
+```
+The numerical summaries support these visual patterns. Mean counts were similar in Northern and Central sites, ranging from 2.50 to 3.39 across zones, but were much higher in the Southern band. In Southern sites, the mean was 7.71 in Open zones and 15.63 in No-take zones. Variability was also greatest in the Southern groups, particularly for No-take sites.
+
+
+## Part 4: Initial GLM choice and formulation
+
+These patterns motivate an initial count GLM including latitude band, zone and their interaction.
+
+Let $Y_i$ denote the total number of coral trout observed across the five transects at site $i$, and let $\mu_i = E(Y_i)$. As the response is a non-negative integer count recorded under the same sampling effort of five equal-length transects at each site, a Poisson model provides a natural initial model for the site-level counts. A log link was used so that fitted expected counts remain positive:
+$$
+Y_i \sim \text{Poisson}(\mu_i), \qquad E(Y_i) = \mu_i, \qquad
+\operatorname{Var}(Y_i) = \mu_i
+$$
+Site observations are assumed to be independent, conditional on latitude band and zone. Using Northern and Open as the reference levels,
+$$
+\log(\mu_i) = \beta_0 + \beta_1C_i + \beta_2S_i + \beta_3N_i + \beta_4C_iN_i + \beta_5S_iN_i,
+$$
+where $C_i, S_i,$ and $N_i$ indicate Central, Southern, and No-take sites respectively. The log link ensures $\mu_i = \exp(\eta_i) > 0$, so fitted expected counts are always valid.
+
+```{r}
+poisson_int <- glm(coral_trout ~ latitude_band * zone,
+                   family = poisson(link = "log"),
+                   data = reef)
+
+summary(poisson_int)
+```
+With Northern and Open as the reference levels, the intercept corresponds to an expected count of $e^{0.916} = 2.50$ coral trout for a Northern Open site. Among Open sites, the expected count was about 1.09 times as large in Central sites and 3.08 times as large in Southern sites as in Northern sites. Within the Northern band, No-take sites had an expected count about 1.36 times that of Open sites. The interaction terms modify this zone association in the other latitude bands: the No-take/Open ratio was multiplied by about 0.83 in Central sites and 1.50 in Southern sites relative to Northern sites. Thus, the fitted model allows the association between fishing zone and expected coral trout abundance to vary by latitude band.
+
+
+## Part 5: Initial model comparison
+
+To assess whether the association between fishing zone and expected coral trout abundance differed across latitude bands, the additive and interaction Poisson models were compared. The null hypothesis was that both interaction coefficients were zero,
+$$
+H_0: \beta_4 = \beta_5 = 0
+$$
+corresponding to the same No-take/Open association across latitude bands. The alternative hypothesis was that at least one interaction coefficient was non-zero,
+$$
+H_A: \text{at least one of} \beta_4, \beta_5 \neq 0.
+$$
+
+```{r}
+poisson_add <- glm(coral_trout ~ latitude_band + zone,
+                   family = poisson(link = "log"),
+                   data = reef)
+
+anova(poisson_add, poisson_int, test = "Chisq")
+AIC(poisson_add, poisson_int)
+```
+
+The likelihood-ratio test gave a deviance difference of 9.40 on 2 degrees of freedom ($p = 0.0091$). Thus, under the initial Poisson model, there was evidence against $H_0$, suggesting that the association between fishing zone and expected coral trout abundance differed across latitude bands. The interaction model also had a lower AIC than the additive model (939.30 vs. 944.70), providing further support for the interaction structure. Therefore, the interaction model is provisionally retained, subject to checking the Poisson variance assumption in the next stage.
+
+
+## Part 6: Dispersion assessment
+
+```{r}
+(pearson_X2 <- sum(residuals(poisson_int, type = "pearson")^2))
+(df_resid <- df.residual(poisson_int))
+(phi_hat <- pearson_X2 / df_resid)
+
+(p_gof <- pchisq(deviance(poisson_int), df = df_resid, lower.tail = FALSE))
+
+```
+The Pearson statistic was $X^2=613.04$ on 114 residual degrees of freedom, giving a dispersion estimate of
+
+$$
+\hat{\phi}=\frac{613.04}{114} = 5.38.
+$$
+This is substantially greater than 1, indicating strong overdispersion relative to the Poisson assumption $\operatorname{Var}(Y_i)=\mu_i$. The residual deviance was 570.62 on 114 degrees of freedom, with a goodness-of-fit p-value of $6.78\times10^{-62}$, providing further evidence that the Poisson variance assumption is inadequate. Consequently, Poisson standard errors are likely to be underestimated and the inferential results from the initial model should be treated cautiously. An overdispersion model is therefore required.
+
+
+## Part 7: Overdispersion model and final selection
+
+```{r}
+quasi_add <- glm(coral_trout ~ latitude_band + zone,
+                 family = quasipoisson(link = "log"),
+                 data = reef)
+
+quasi_int <- glm(coral_trout ~ latitude_band * zone,
+                 family = quasipoisson(link = "log"),
+                 data = reef)
+
+summary(quasi_int)
+
+anova(quasi_add, quasi_int, test = "F")
+```
+
+Because the Poisson model showed substantial overdispersion, the models were refitted using a quasi-Poisson distribution with a log link, allowing $\operatorname{Var}(Y_i)=\phi\mu_i$. The estimated dispersion parameter for the interaction model was $\hat{\phi}=5.38$, which increased the standard errors relative to the original Poisson model while leaving the fitted mean structure unchanged. The additive and interaction quasi-Poisson models were compared using an F test, giving $F=0.874$ and $p=0.420$. After accounting for overdispersion, there was therefore insufficient evidence that the association between fishing zone and coral trout abundance differed across latitude bands. The simpler additive quasi-Poisson model was selected as the final model. AIC was not used because quasi-Poisson models are based on quasi-likelihood rather than a fully specified likelihood.
+
+## Part 8: Diagnostics and model alternatives
+
+```{r}
+final_mod <- quasi_add
+
+plot(fitted(final_mod),
+     rstudent(final_mod),
+     xlab = "Fitted mean count",
+     ylab = "Studentised residual",
+     main = "Studentised residuals versus fitted values")
+
+abline(h = 0, lty = 2)
+abline(h = c(-2, 2), lty = 3)
+```
+The studentised residuals showed no clear systematic trend or curvature across fitted values, suggesting that the additive mean structure was broadly reasonable. Most residuals were within approximately $\pm2$, although AIMS022, AIMS024 and AIMS099 had unusually large positive residuals of 5.98, 3.60 and 2.61 respectively.
+
+```{r}
+lev <- hatvalues(final_mod)
+
+plot(lev, ylab = "Leverage", xlab = "Observation", main = "Leverage")
+```
+Leverage values were relatively similar across sites, with no observation showing exceptionally high leverage. This suggests that the unusual residuals were not primarily caused by sites having extreme predictor combinations.
+
+```{r}
+cd <- cooks.distance(final_mod)
+
+plot(cd, ylab = "Cook's distance", xlab = "Observation", main = "Cook's distance")
+```
+Cook's distance identified AIMS022 as the most influential observation, with AIMS024 also standing out. This motivated a sensitivity analysis to assess whether the final conclusions depended heavily on these sites.
+
+```{r}
+diag_table <- data.frame(site = reef$site,
+                         fitted = fitted(final_mod),
+                         studentised_residual = rstudent(final_mod),
+                         leverage = lev,
+                         cooks_distance = cd)
+
+diag_table[order(-abs(diag_table$studentised_residual)), ][1:10, ]
+diag_table[order(-diag_table$cooks_distance), ][1:10, ]
+```
+
+```{r}
+quasi_add_no22 <- update(quasi_add, data = reef[-22, ])
+
+quasi_add_no_22_24 <- update(quasi_add, data = reef[-c(22, 24), ])
+
+cbind(Full = coef(quasi_add),
+      No_AIMS022 = coef(quasi_add_no22),
+      No_AIMS022_024 = coef(quasi_add_no_22_24))
+```
+
+```{r}
+summary(quasi_add)
+summary(quasi_add_no22)$coefficients
+summary(quasi_add_no_22_24)$coefficients
+```
+
+Removing AIMS022 reduced the No-take coefficient from 0.565 to 0.463, while removing both AIMS022 and AIMS024 reduced it further to 0.382. The Southern coefficient similarly decreased from 1.377 to 1.287 and 1.218. However, both effects remained in the same direction and retained statistical support. These observations therefore affected the magnitude of the estimated effects but did not change the main conclusions, so all sites were retained in the primary analysis. 
+
+The substantial extra-Poisson variation had already been accommodated by the quasi-Poisson model. Although a few extreme observations remained, the residual plot showed no clear systematic pattern, and the sensitivity analysis indicated that the main conclusions were robust. Within the models covered in the subject, there was therefore no strong diagnostic evidence that an alternative model was required, so the additive quasi-Poisson model was retained as the final model.
+
+## Part 9: Estimates and uncertainty for the client
+
+```{r}
+newdat <- expand.grid(latitude_band = levels(reef$latitude_band),
+                      zone = levels(reef$zone))
+
+pred <- predict(quasi_add,
+                newdata = newdat,
+                type = "link",
+                se.fit = TRUE)
+
+newdat$fit <- exp(pred$fit)
+newdat$lower <- exp(pred$fit - 2 * pred$se.fit)
+newdat$upper <- exp(pred$fit + 2 * pred$se.fit)
+
+newdat
+```
+```{r}
+b_zone <- coef(quasi_add)["zoneNo-take"]
+se_zone <- sqrt(vcov(quasi_add)["zoneNo-take", "zoneNo-take"])
+
+(ci_link <- c(estimate = b_zone,
+              lower = b_zone - 2 * se_zone,
+              upper = b_zone + 2 * se_zone))
+
+(ci_ratio <- exp(ci_link))
+```
+
+```{r}
+pred_table <- transform(newdat,
+                        fit = round(fit, 2),
+                        lower= round(lower, 2),
+                        upper = round(upper, 2))
+
+knitr::kable(
+  pred_table,
+  col.names = c("Latitude band", "Zone", "Fitted mean",
+                "Lower 95% CI", "Upper 95% CI"),
+  caption = "Fitted site-level mean counts and approximate 95% CIs."
+)
+```
+
+Fitted site-level mean counts from the final additive quasi-Poisson model are shown in the table above. Expected counts were similar in the Northern and Central bands, but substantially higher in the Southern band. The highest fitted mean was for Southern No-take sites, at 14.88 coral trout per site.
+
+Because the final model did not retain the interaction, the estimated No-take/Open comparison is constant across latitude bands. On the linear predictor scale, the estimated zone coefficient was 0.565 with an approximate 95% confidence interval of 0.217 to 0.914. Exponentiating gives an expected-count ratio of 1.76, with a 95% confidence interval of 1.24 to 2.49. Thus, after accounting for latitude band, No-take sites were associated with approximately 76% higher expected coral trout counts than Open sites.
+
+Overall, coral trout abundance was highest in the Southern band, and No-take sites had higher expected counts than Open sites. However, there was insufficient evidence that the association with fishing zone differed among latitude bands after accounting for overdispersion.
